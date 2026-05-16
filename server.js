@@ -24,7 +24,8 @@ const PORT = process.env.PORT || 3000;
 
 // ── Middleware ──────────────────────────────────────────────
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: "500mb" }));
+app.use(express.urlencoded({ extended: true, limit: "500mb" }));
 // Disable cache untuk HTML supaya browser selalu ambil versi terbaru
 app.use((req, res, next) => {
   if (req.path === "/" || req.path.endsWith(".html")) {
@@ -62,14 +63,66 @@ const upload = multer({
 // ── Upload history (in-memory, cukup untuk personal) ───────
 const history = [];
 
-// ── Server log (in-memory, max 200 entries) ─────────────────
+// ── Redis (Upstash) — persistent log ────────────────────────
+let redis = null;
+const REDIS_KEY = "xello:logs";
+const MAX_LOG_ENTRIES = 200;
+
+if (process.env.UPSTASH_REDIS_URL && process.env.UPSTASH_REDIS_TOKEN) {
+  try {
+    const { Redis } = require("@upstash/redis");
+    redis = new Redis({
+      url: process.env.UPSTASH_REDIS_URL,
+      token: process.env.UPSTASH_REDIS_TOKEN,
+    });
+    console.log("[STARTUP] Upstash Redis connected — logs will persist");
+  } catch (e) {
+    console.warn("[STARTUP] Redis init failed, falling back to memory:", e.message);
+  }
+} else {
+  console.log("[STARTUP] No Redis config — using in-memory logs");
+}
+
+// In-memory fallback
 const serverLogs = [];
-function log(msg, type = "info") {
+
+async function log(msg, type = "info") {
   const icons = { error: "❌", success: "✅", warn: "⚠️", info: "ℹ️" };
   const entry = { time: new Date().toISOString(), type, msg };
+
+  // Always keep in-memory for fast reads
   serverLogs.unshift(entry);
-  if (serverLogs.length > 200) serverLogs.pop();
+  if (serverLogs.length > MAX_LOG_ENTRIES) serverLogs.pop();
+
+  // Persist to Redis if available
+  if (redis) {
+    try {
+      await redis.lpush(REDIS_KEY, JSON.stringify(entry));
+      await redis.ltrim(REDIS_KEY, 0, MAX_LOG_ENTRIES - 1);
+    } catch (e) {
+      console.warn("Redis log write error:", e.message);
+    }
+  }
+
   console.log(`[${entry.time}] ${icons[type] || "ℹ️"} ${msg}`);
+}
+
+// Load logs from Redis into memory on startup
+async function loadLogsFromRedis() {
+  if (!redis) return;
+  try {
+    const items = await redis.lrange(REDIS_KEY, 0, MAX_LOG_ENTRIES - 1);
+    serverLogs.length = 0;
+    items.forEach(item => {
+      try {
+        const parsed = typeof item === "string" ? JSON.parse(item) : item;
+        serverLogs.push(parsed);
+      } catch {}
+    });
+    console.log(`[STARTUP] Loaded ${serverLogs.length} log entries from Redis`);
+  } catch (e) {
+    console.warn("[STARTUP] Could not load logs from Redis:", e.message);
+  }
 }
 
 // ── Build atempo chain (FFmpeg max per node: 0.5–2.0) ──────
@@ -293,7 +346,7 @@ app.post("/api/validate-key", requireAuth, async (req, res) => {
 });
 
 // ── Upload + Process (SSE streaming) ───────────────────────
-app.post("/api/upload", requireAuth, upload.array("files"), async (req, res) => {
+app.post("/api/upload", requireAuth, upload.array("files", 500), async (req, res) => {
   if (!req.files || req.files.length === 0)
     return res.status(400).json({ error: "Tidak ada file" });
 
@@ -391,8 +444,11 @@ app.get("/api/logs", requireAuth, (req, res) => {
 });
 
 // ── Clear server logs ───────────────────────────────────────
-app.delete("/api/logs", requireAuth, (req, res) => {
+app.delete("/api/logs", requireAuth, async (req, res) => {
   serverLogs.length = 0;
+  if (redis) {
+    try { await redis.del(REDIS_KEY); } catch {}
+  }
   res.json({ ok: true });
 });
 
@@ -402,7 +458,11 @@ app.get("*", (req, res) => {
 });
 
 // ── Start ───────────────────────────────────────────────────
-app.listen(PORT, () => {
-  log(`🚀 Xello Personal running on port ${PORT}`, "success");
-  log(`🔑 Auth: ${process.env.ACCESS_PASSWORD ? "ON (password set)" : "OFF (open access)"}`, "info");
-});
+(async () => {
+  await loadLogsFromRedis();
+  app.listen(PORT, () => {
+    log(`🚀 Xello Personal running on port ${PORT}`, "success");
+    log(`🔑 Auth: ${process.env.ACCESS_PASSWORD ? "ON (password set)" : "OFF (open access)"}`, "info");
+    log(`💾 Log storage: ${redis ? "Upstash Redis (persistent)" : "In-memory (sementara)"}`, "info");
+  });
+})();
