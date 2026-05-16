@@ -258,6 +258,28 @@
   .progress-text { font-size: 0.85rem; color: var(--muted); margin-bottom: 16px; }
 
   /* ── Log list ── */
+  /* ── File list items ── */
+  .file-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    border-radius: 7px;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.06);
+    font-size: 0.8rem;
+    transition: border-color 0.2s;
+  }
+  .file-item.pending  { border-color: rgba(255,255,255,0.08); }
+  .file-item.uploading{ border-color: rgba(0,229,255,0.4); background: rgba(0,229,255,0.05); }
+  .file-item.success  { border-color: rgba(0,229,100,0.4); background: rgba(0,229,100,0.05); }
+  .file-item.failed   { border-color: rgba(255,82,82,0.4);  background: rgba(255,82,82,0.05); }
+  .file-item-icon { font-size: 1rem; flex-shrink: 0; }
+  .file-item-name { flex: 1; color: var(--text); word-break: break-all; line-height: 1.3; }
+  .file-item-size { font-size: 0.72rem; color: var(--muted); flex-shrink: 0; }
+  .file-item-status { font-size: 0.72rem; flex-shrink: 0; font-family: monospace; }
+  .file-item-assetid { font-size: 0.7rem; color: var(--accent); cursor: pointer; font-family: monospace; margin-top:2px; }
+
   .log-list { list-style: none; display: flex; flex-direction: column; gap: 8px; }
   .log-item {
     background: var(--surface2);
@@ -456,6 +478,15 @@
     <div class="dz-count" id="fileCount"></div>
   </div>
   <input type="file" id="fileInput" accept="audio/*" multiple onchange="handleFiles(this.files)"/>
+
+  <!-- File list with status -->
+  <div id="fileListWrap" style="display:none;margin-top:12px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <span style="font-size:0.82rem;color:var(--muted)" id="fileListSummary"></span>
+      <button class="btn btn-ghost btn-sm" onclick="clearFileList()" style="font-size:0.75rem;padding:3px 10px">✕ Hapus Semua</button>
+    </div>
+    <div id="fileListItems" style="display:flex;flex-direction:column;gap:4px;max-height:260px;overflow-y:auto"></div>
+  </div>
 
   <!-- Speed -->
   <div class="slider-wrap">
@@ -679,8 +710,21 @@ function updateHint() {
 }
 
 // ── File handling ────────────────────────────────────────────
+function formatSize(bytes) {
+  if (bytes < 1024) return bytes + " B";
+  if (bytes < 1024*1024) return (bytes/1024).toFixed(0) + " KB";
+  return (bytes/(1024*1024)).toFixed(1) + " MB";
+}
+
 function handleFiles(files) {
-  selectedFiles = Array.from(files);
+  const valid = Array.from(files).filter(f => f.type.startsWith("audio/") || /\.(mp3|wav|ogg|flac|aac|m4a)$/i.test(f.name));
+  if (valid.length === 0) return toast("⚠️ Tidak ada file audio yang valid");
+  // Append, jangan replace — biar bisa tambah file berkali-kali
+  const existing = selectedFiles.map(f => f.name);
+  const newFiles = valid.filter(f => !existing.includes(f.name));
+  selectedFiles = [...selectedFiles, ...newFiles];
+  if (newFiles.length < valid.length) toast(`ℹ️ ${valid.length - newFiles.length} file duplikat diabaikan`);
+  renderFileList();
   updateFileCount();
   updateBtn();
 }
@@ -688,11 +732,76 @@ function handleFiles(files) {
 function handleDrop(e) {
   e.preventDefault();
   document.getElementById("dropzone").classList.remove("drag");
-  const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith("audio/") || /\.(mp3|wav|ogg|flac|aac|m4a)$/i.test(f.name));
-  if (files.length === 0) return toast("⚠️ Tidak ada file audio yang valid");
-  selectedFiles = files;
+  handleFiles(e.dataTransfer.files);
+}
+
+function clearFileList() {
+  if (isUploading) return toast("⚠️ Tidak bisa hapus file saat upload sedang berjalan");
+  selectedFiles = [];
+  renderFileList();
   updateFileCount();
   updateBtn();
+  document.getElementById("fileInput").value = "";
+}
+
+function renderFileList() {
+  const wrap = document.getElementById("fileListWrap");
+  const container = document.getElementById("fileListItems");
+  const summary = document.getElementById("fileListSummary");
+  if (selectedFiles.length === 0) { wrap.style.display = "none"; return; }
+  wrap.style.display = "block";
+  const totalSize = selectedFiles.reduce((a, f) => a + f.size, 0);
+  summary.textContent = `${selectedFiles.length} file — ${formatSize(totalSize)} total`;
+  container.innerHTML = selectedFiles.map((f, i) => `
+    <div class="file-item pending" id="fitem_${i}">
+      <span class="file-item-icon">🎵</span>
+      <div style="flex:1;min-width:0">
+        <div class="file-item-name">${f.name}</div>
+        <div id="fitem_assetid_${i}" class="file-item-assetid" style="display:none"></div>
+      </div>
+      <span class="file-item-size">${formatSize(f.size)}</span>
+      <span class="file-item-status" id="fitem_status_${i}" style="color:var(--muted)">—</span>
+      ${!isUploading ? `<span onclick="removeFile(${i})" style="cursor:pointer;color:var(--muted);font-size:0.9rem;flex-shrink:0" title="Hapus">✕</span>` : ""}
+    </div>
+  `).join("");
+}
+
+function removeFile(index) {
+  if (isUploading) return toast("⚠️ Tidak bisa hapus file saat upload sedang berjalan");
+  selectedFiles.splice(index, 1);
+  renderFileList();
+  updateFileCount();
+  updateBtn();
+}
+
+function updateFileItemStatus(index, status, assetId, error) {
+  const item = document.getElementById(`fitem_${index}`);
+  const statusEl = document.getElementById(`fitem_status_${index}`);
+  const assetEl = document.getElementById(`fitem_assetid_${index}`);
+  if (!item) return;
+  item.className = `file-item ${status}`;
+  if (status === "uploading") {
+    statusEl.textContent = "⏳";
+    statusEl.style.color = "var(--accent)";
+  } else if (status === "success") {
+    statusEl.textContent = "✅";
+    statusEl.style.color = "#00e564";
+    if (assetId) {
+      assetEl.style.display = "block";
+      assetEl.textContent = `ID: ${assetId}`;
+      assetEl.onclick = () => copyText(assetId, assetEl);
+      assetEl.title = "Klik untuk copy";
+    }
+  } else if (status === "failed") {
+    statusEl.textContent = "❌";
+    statusEl.style.color = "#ff6b6b";
+    if (error) {
+      assetEl.style.display = "block";
+      assetEl.style.color = "#ff6b6b";
+      assetEl.textContent = error.slice(0, 60);
+      assetEl.onclick = null;
+    }
+  }
 }
 
 function updateFileCount() {
@@ -789,7 +898,12 @@ function handleSSEEvent(evt) {
     const pct = ((evt.index - 1) / (evt.total || 1) * 100).toFixed(0);
     bar.style.width = pct + "%";
     const statusLabel = { ffmpeg: "🔄 FFmpeg processing...", uploading: "📤 Uploading ke Roblox...", processing: "⚙️ Mempersiapkan..." }[evt.status] || "⚙️";
-    // Add or update log item
+    text.textContent = `${evt.index} / ${evt.total} — ${statusLabel}`;
+
+    // Update file list item
+    updateFileItemStatus(evt.index - 1, "uploading");
+
+    // Also update progress log
     let item = document.getElementById(`log_${evt.index}`);
     if (!item) {
       item = document.createElement("li");
@@ -798,20 +912,27 @@ function handleSSEEvent(evt) {
       logList.appendChild(item);
     }
     item.innerHTML = `<span class="log-icon">⏳</span><div><div class="log-name">${evt.file}</div><div class="log-detail">${statusLabel}</div></div>`;
-    text.textContent = `${evt.index} / ${evt.total} file diproses...`;
   }
 
   if (evt.type === "result") {
-    const pct = (evt.index / (document.querySelectorAll(".log-item").length) * 100).toFixed(0);
-    bar.style.width = Math.min(parseInt(pct), 99) + "%";
+    const pct = Math.min((evt.index / (evt.total || 1) * 100), 99).toFixed(0);
+    bar.style.width = pct + "%";
+    text.textContent = `${evt.index} / ${evt.total} selesai`;
 
+    // Update file list item status
+    if (evt.status === "SUCCESS") {
+      updateFileItemStatus(evt.index - 1, "success", evt.assetId);
+    } else {
+      updateFileItemStatus(evt.index - 1, "failed", null, evt.error);
+    }
+
+    // Also update progress log
     let item = document.getElementById(`log_${evt.index}`);
     if (!item) {
       item = document.createElement("li");
       item.id = `log_${evt.index}`;
       logList.appendChild(item);
     }
-
     if (evt.status === "SUCCESS") {
       item.className = "log-item success";
       item.innerHTML = `
@@ -832,6 +953,8 @@ function handleSSEEvent(evt) {
     bar.style.width = "100%";
     text.textContent = `✅ Selesai! ${evt.success} dari ${evt.total} file berhasil diupload.`;
     toast(`🎉 ${evt.success}/${evt.total} berhasil!`);
+    // Refresh server log if panel open
+    if (serverLogOpen) fetchServerLogs();
   }
 }
 
