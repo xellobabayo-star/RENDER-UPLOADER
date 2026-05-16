@@ -1,0 +1,941 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Xello — Roblox Audio Uploader</title>
+<style>
+  :root {
+    --bg: #0e0e12;
+    --surface: #16161e;
+    --surface2: #1e1e2a;
+    --border: #2a2a3a;
+    --accent: #00e5ff;
+    --accent2: #7c6dfa;
+    --success: #00e676;
+    --error: #ff5252;
+    --warn: #ffab40;
+    --text: #e8e8f0;
+    --muted: #6e6e8a;
+    --radius: 12px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 24px 16px;
+  }
+
+  /* ── Header ── */
+  .header {
+    text-align: center;
+    margin-bottom: 32px;
+  }
+  .header h1 {
+    font-size: 2rem;
+    font-weight: 800;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    letter-spacing: -0.5px;
+  }
+  .header p {
+    color: var(--muted);
+    font-size: 0.9rem;
+    margin-top: 6px;
+  }
+
+  /* ── Card ── */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 24px;
+    width: 100%;
+    max-width: 680px;
+    margin-bottom: 16px;
+  }
+  .card-title {
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .card-title::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  /* ── Auth overlay ── */
+  #authOverlay {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.85);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 999;
+    backdrop-filter: blur(8px);
+  }
+  #authOverlay.hidden { display: none; }
+  .auth-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 32px;
+    width: 320px;
+    text-align: center;
+  }
+  .auth-box h2 { font-size: 1.3rem; margin-bottom: 8px; }
+  .auth-box p { color: var(--muted); font-size: 0.85rem; margin-bottom: 20px; }
+
+  /* ── Form elements ── */
+  label {
+    display: block;
+    font-size: 0.8rem;
+    color: var(--muted);
+    margin-bottom: 6px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  input[type=text], input[type=password], input[type=number], select, textarea {
+    width: 100%;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    padding: 10px 14px;
+    font-size: 0.9rem;
+    outline: none;
+    transition: border-color 0.2s;
+    font-family: inherit;
+    margin-bottom: 14px;
+  }
+  input:focus, select:focus, textarea:focus {
+    border-color: var(--accent);
+  }
+  input[type=password] { letter-spacing: 2px; }
+  textarea { resize: vertical; min-height: 60px; }
+
+  /* ── Row layout ── */
+  .row { display: flex; gap: 12px; }
+  .row > * { flex: 1; }
+
+  /* ── Radio group ── */
+  .radio-group {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+  .radio-btn {
+    flex: 1;
+    padding: 10px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    color: var(--muted);
+    cursor: pointer;
+    text-align: center;
+    font-size: 0.85rem;
+    font-weight: 600;
+    transition: all 0.2s;
+    user-select: none;
+  }
+  .radio-btn:hover { border-color: var(--accent); color: var(--text); }
+  .radio-btn.active {
+    border-color: var(--accent);
+    background: rgba(0,229,255,0.08);
+    color: var(--accent);
+  }
+
+  /* ── Slider ── */
+  .slider-wrap { margin-bottom: 16px; }
+  .slider-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+  }
+  .slider-header label { margin: 0; }
+  .slider-val {
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: var(--accent);
+    min-width: 60px;
+    text-align: right;
+  }
+  input[type=range] {
+    width: 100%; height: 6px;
+    background: var(--surface2);
+    border: none;
+    border-radius: 3px;
+    outline: none;
+    cursor: pointer;
+    padding: 0;
+    margin: 0;
+    accent-color: var(--accent);
+  }
+  .slider-hint {
+    font-size: 0.75rem;
+    color: var(--muted);
+    margin-top: 6px;
+  }
+
+  /* ── File drop zone ── */
+  .dropzone {
+    border: 2px dashed var(--border);
+    border-radius: var(--radius);
+    padding: 40px 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    margin-bottom: 16px;
+  }
+  .dropzone:hover, .dropzone.drag { border-color: var(--accent); background: rgba(0,229,255,0.04); }
+  .dropzone .dz-icon { font-size: 2.5rem; margin-bottom: 10px; }
+  .dropzone .dz-text { color: var(--muted); font-size: 0.9rem; }
+  .dropzone .dz-count { color: var(--accent); font-weight: 700; margin-top: 6px; font-size: 0.85rem; }
+  #fileInput { display: none; }
+
+  /* ── Button ── */
+  .btn {
+    width: 100%;
+    padding: 13px;
+    border-radius: 10px;
+    border: none;
+    font-size: 0.95rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s;
+    letter-spacing: 0.5px;
+  }
+  .btn-primary {
+    background: linear-gradient(135deg, var(--accent), #00b8cc);
+    color: #000;
+  }
+  .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 4px 20px rgba(0,229,255,0.25); }
+  .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
+  .btn-sm {
+    width: auto;
+    padding: 7px 16px;
+    font-size: 0.8rem;
+    border-radius: 8px;
+  }
+  .btn-ghost {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--muted);
+  }
+  .btn-ghost:hover { color: var(--text); border-color: var(--accent); }
+
+  /* ── Progress ── */
+  #progressSection { display: none; }
+  .progress-bar-wrap {
+    height: 6px;
+    background: var(--surface2);
+    border-radius: 3px;
+    overflow: hidden;
+    margin-bottom: 12px;
+  }
+  .progress-bar {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    border-radius: 3px;
+    transition: width 0.4s;
+    width: 0%;
+  }
+  .progress-text { font-size: 0.85rem; color: var(--muted); margin-bottom: 16px; }
+
+  /* ── Log list ── */
+  .log-list { list-style: none; display: flex; flex-direction: column; gap: 8px; }
+  .log-item {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 0.82rem;
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+  }
+  .log-item.success { border-color: rgba(0,230,118,0.3); }
+  .log-item.failed { border-color: rgba(255,82,82,0.3); }
+  .log-item.processing { border-color: rgba(0,229,255,0.2); }
+  .log-icon { font-size: 1rem; flex-shrink: 0; margin-top: 1px; }
+  .log-name { font-weight: 600; color: var(--text); word-break: break-all; }
+  .log-detail { color: var(--muted); margin-top: 2px; font-family: monospace; font-size: 0.78rem; }
+  .asset-id {
+    display: inline-block;
+    background: rgba(0,229,255,0.1);
+    color: var(--accent);
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-family: monospace;
+    cursor: pointer;
+    user-select: all;
+    font-size: 0.8rem;
+    margin-top: 4px;
+  }
+  .asset-id:hover { background: rgba(0,229,255,0.2); }
+
+  /* ── History ── */
+  #historySection { display: none; }
+  .history-list { display: flex; flex-direction: column; gap: 8px; max-height: 400px; overflow-y: auto; }
+  .history-item {
+    background: var(--surface2);
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 0.82rem;
+    border-left: 3px solid transparent;
+  }
+  .history-item.SUCCESS { border-color: var(--success); }
+  .history-item.FAILED { border-color: var(--error); }
+  .history-meta { color: var(--muted); font-size: 0.75rem; margin-top: 4px; }
+
+  /* ── Roblox hint ── */
+  .hint-box {
+    background: rgba(124,109,250,0.08);
+    border: 1px solid rgba(124,109,250,0.25);
+    border-radius: 8px;
+    padding: 12px 14px;
+    font-size: 0.82rem;
+    color: var(--muted);
+    margin-top: 14px;
+    display: none;
+  }
+  .hint-box.show { display: block; }
+  .hint-box strong { color: var(--accent2); }
+  .hint-box code {
+    background: var(--surface2);
+    padding: 1px 6px;
+    border-radius: 4px;
+    color: var(--accent);
+    font-family: monospace;
+  }
+
+
+  /* ── Toggle switch ── */
+  .toggle-wrap {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+    margin-bottom: 16px;
+    cursor: pointer;
+  }
+  .toggle-wrap:hover { border-color: var(--accent); }
+  .toggle-wrap.active { border-color: rgba(0,229,255,0.4); background: rgba(0,229,255,0.05); }
+  .toggle-left { flex: 1; }
+  .toggle-label { font-weight: 700; font-size: 0.9rem; margin-bottom: 4px; }
+  .toggle-desc { font-size: 0.78rem; color: var(--muted); line-height: 1.4; }
+  .toggle-desc strong { color: var(--accent); }
+  .toggle-switch {
+    width: 48px; height: 26px;
+    background: var(--border);
+    border-radius: 13px;
+    position: relative;
+    flex-shrink: 0;
+    transition: background 0.3s;
+  }
+  .toggle-wrap.active .toggle-switch { background: var(--accent); }
+  .toggle-knob {
+    width: 20px; height: 20px;
+    background: #fff;
+    border-radius: 50%;
+    position: absolute;
+    top: 3px; left: 3px;
+    transition: transform 0.3s;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+  }
+  .toggle-wrap.active .toggle-knob { transform: translateX(22px); }
+
+  /* ── Toast ── */
+  #toast {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 24px;
+    font-size: 0.85rem;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.3s;
+    z-index: 9999;
+    white-space: nowrap;
+  }
+  #toast.show { opacity: 1; }
+
+  /* ── Responsive ── */
+  @media (max-width: 480px) {
+    .row { flex-direction: column; }
+    .header h1 { font-size: 1.6rem; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Auth overlay -->
+<div id="authOverlay">
+  <div class="auth-box">
+    <div style="font-size:2.5rem;margin-bottom:12px">🔐</div>
+    <h2>Xello Personal</h2>
+    <p>Masukkan password untuk akses</p>
+    <input type="password" id="authInput" placeholder="Password..." style="text-align:center"/>
+    <button class="btn btn-primary" onclick="submitAuth()">Masuk</button>
+    <p id="authError" style="color:var(--error);font-size:0.8rem;margin-top:10px;display:none">Password salah!</p>
+  </div>
+</div>
+
+<!-- Header -->
+<div class="header">
+  <h1>🎵 Xello Personal</h1>
+  <p>Roblox Audio Uploader — Personal Edition</p>
+</div>
+
+<!-- Roblox Settings -->
+<div class="card">
+  <div class="card-title">🎮 Roblox Settings</div>
+
+  <div class="radio-group" id="creatorTypeGroup">
+    <div class="radio-btn active" data-val="user" onclick="setCreator('user', this)">👤 Personal</div>
+    <div class="radio-btn" data-val="group" onclick="setCreator('group', this)">👥 Group</div>
+  </div>
+
+  <div class="row">
+    <div>
+      <label>User ID Roblox</label>
+      <input type="text" id="userId" placeholder="contoh: 123456789"/>
+    </div>
+    <div id="groupIdWrap" style="display:none">
+      <label>Group ID</label>
+      <input type="text" id="groupId" placeholder="contoh: 987654321"/>
+    </div>
+  </div>
+
+  <label>API Key (Roblox Open Cloud)</label>
+  <input type="password" id="apiKey" placeholder="•••••••••••••••••••••"/>
+
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <button class="btn btn-ghost btn-sm" onclick="saveSettings()">💾 Simpan Settings</button>
+    <button class="btn btn-ghost btn-sm" onclick="clearSettings()">🗑️ Hapus</button>
+    <button class="btn btn-ghost btn-sm" id="validateBtn" onclick="validateApiKey()">🔍 Test API Key</button>
+  </div>
+  <div id="validateResult" style="display:none;margin-top:10px;padding:10px 14px;border-radius:8px;font-size:0.85rem;line-height:1.5"></div>
+</div>
+
+<!-- Upload -->
+<div class="card">
+  <div class="card-title">📁 Upload Audio</div>
+
+  <!-- Drop zone -->
+  <div class="dropzone" id="dropzone" onclick="document.getElementById('fileInput').click()"
+    ondragover="event.preventDefault();this.classList.add('drag')"
+    ondragleave="this.classList.remove('drag')"
+    ondrop="handleDrop(event)">
+    <div class="dz-icon">🎵</div>
+    <div class="dz-text">Klik atau drag & drop file audio di sini</div>
+    <div class="dz-text" style="font-size:0.78rem;margin-top:4px">MP3, WAV, OGG, FLAC, AAC — Max 150MB/file</div>
+    <div class="dz-count" id="fileCount"></div>
+  </div>
+  <input type="file" id="fileInput" accept="audio/*" multiple onchange="handleFiles(this.files)"/>
+
+  <!-- Speed -->
+  <div class="slider-wrap">
+    <div class="slider-header">
+      <label>⚡ Upload Speed (Tempo Multiplier)</label>
+      <span class="slider-val" id="tempoVal">1.0×</span>
+    </div>
+    <input type="range" id="tempoSlider" min="1" max="32" step="1" value="1"
+      oninput="updateTempo(this.value)"/>
+    <div class="slider-hint">Speed 1× = upload normal. Speed lebih tinggi = file lebih cepat, gunakan PlaybackSpeed di Roblox.</div>
+  </div>
+
+  <!-- Pitch -->
+  <div class="slider-wrap">
+    <div class="slider-header">
+      <label>🎵 Pitch Shift</label>
+      <span class="slider-val" id="pitchVal">0 st</span>
+    </div>
+    <input type="range" id="pitchSlider" min="-24" max="24" step="1" value="0"
+      oninput="updatePitch(this.value)"/>
+    <div class="slider-hint">0 = tidak ada perubahan pitch.</div>
+  </div>
+
+  <!-- Roblox PlaybackSpeed hint -->
+  <div class="hint-box" id="speedHint"></div>
+
+  <!-- Volume Normalization toggle -->
+  <div class="toggle-wrap" id="normalizeWrap" onclick="toggleNormalize()">
+    <div class="toggle-left">
+      <div class="toggle-label">🔊 Volume Normalization</div>
+      <div class="toggle-desc">Perbaiki volume yang drop akibat pitch/speed — pakai <strong>dynaudnorm</strong>, bukan loudnorm. Suara lebih keras tanpa distorsi.</div>
+    </div>
+    <div class="toggle-switch">
+      <div class="toggle-knob"></div>
+    </div>
+  </div>
+
+  <!-- Display name & desc (optional) -->
+  <label>Nama Asset (opsional)</label>
+  <input type="text" id="displayName" placeholder="Kosongkan = pakai nama file"/>
+
+  <label>Deskripsi (opsional)</label>
+  <textarea id="description" placeholder="Deskripsi audio di Roblox..."></textarea>
+
+  <button class="btn btn-primary" id="uploadBtn" onclick="startUpload()" disabled>
+    🚀 Upload ke Roblox
+  </button>
+</div>
+
+<!-- Progress -->
+<div class="card" id="progressSection">
+  <div class="card-title">📊 Progress</div>
+  <div class="progress-bar-wrap">
+    <div class="progress-bar" id="progressBar"></div>
+  </div>
+  <div class="progress-text" id="progressText">Mempersiapkan...</div>
+  <ul class="log-list" id="logList"></ul>
+</div>
+
+<!-- History -->
+<div class="card" id="historySection">
+  <div class="card-title" style="justify-content:space-between">
+    <span>📋 Upload History</span>
+    <button class="btn btn-ghost btn-sm" onclick="clearHistory()">Hapus Semua</button>
+  </div>
+  <div class="history-list" id="historyList"></div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ── State ──────────────────────────────────────────────────
+let selectedFiles = [];
+let isUploading = false;
+let creatorType = "user";
+let accessToken = "";
+let doNormalize = false;
+
+// Tempo multiplier map (slider 1-32 → actual multiplier)
+const TEMPO_MAP = [
+  1, 1.25, 1.5, 1.75, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6, 6.5, 7, 7.5,
+  8, 8.5, 9, 9.5, 10, 10.5, 11, 11.5, 12, 12.5, 13, 13.5, 14, 14.5, 15, 16
+];
+
+function getTempoValue() {
+  const idx = parseInt(document.getElementById("tempoSlider").value) - 1;
+  return TEMPO_MAP[Math.min(idx, TEMPO_MAP.length - 1)];
+}
+
+// ── Auth ───────────────────────────────────────────────────
+async function initAuth() {
+  // Coba pakai saved token dulu
+  const saved = localStorage.getItem("xp_token");
+  if (saved) accessToken = saved;
+
+  // Cek ke server — /api/auth-check wajib lolos requireAuth
+  const ok = await checkAuth(accessToken);
+  if (ok) {
+    document.getElementById("authOverlay").classList.add("hidden");
+    loadSettings();
+    loadHistory();
+  }
+  // Kalau gagal → tampilkan overlay (overlay visible by default)
+}
+
+async function checkAuth(token) {
+  try {
+    const headers = {};
+    if (token) headers["x-access-token"] = token;
+    const res = await fetch("/api/auth-check", { headers });
+    return res.ok;
+  } catch { return false; }
+}
+
+async function submitAuth() {
+  const pass = document.getElementById("authInput").value.trim();
+  if (!pass) return;
+  const ok = await checkAuth(pass);
+  if (ok) {
+    accessToken = pass;
+    localStorage.setItem("xp_token", pass);
+    document.getElementById("authOverlay").classList.add("hidden");
+    loadSettings();
+    loadHistory();
+  } else {
+    document.getElementById("authError").style.display = "block";
+  }
+}
+
+document.getElementById("authInput").addEventListener("keydown", e => { if (e.key === "Enter") submitAuth(); });
+
+// ── Settings persistence ────────────────────────────────────
+function saveSettings() {
+  localStorage.setItem("xp_userId", document.getElementById("userId").value.trim());
+  localStorage.setItem("xp_groupId", document.getElementById("groupId").value.trim());
+  localStorage.setItem("xp_apiKey", document.getElementById("apiKey").value.trim());
+  localStorage.setItem("xp_creator", creatorType);
+  toast("✅ Settings disimpan!");
+}
+
+function clearSettings() {
+  ["xp_userId","xp_groupId","xp_apiKey","xp_creator"].forEach(k => localStorage.removeItem(k));
+  document.getElementById("userId").value = "";
+  document.getElementById("groupId").value = "";
+  document.getElementById("apiKey").value = "";
+  setCreator("user", document.querySelector('.radio-btn[data-val="user"]'));
+  toast("🗑️ Settings dihapus");
+}
+
+function loadSettings() {
+  document.getElementById("userId").value = localStorage.getItem("xp_userId") || "";
+  document.getElementById("groupId").value = localStorage.getItem("xp_groupId") || "";
+  document.getElementById("apiKey").value = localStorage.getItem("xp_apiKey") || "";
+  const saved = localStorage.getItem("xp_creator") || "user";
+  const btn = document.querySelector(`.radio-btn[data-val="${saved}"]`);
+  if (btn) setCreator(saved, btn);
+  // Restore normalize state
+  if (localStorage.getItem("xp_normalize") === "1") {
+    doNormalize = true;
+    document.getElementById("normalizeWrap")?.classList.add("active");
+  }
+}
+
+// ── Creator type ────────────────────────────────────────────
+function setCreator(val, el) {
+  creatorType = val;
+  document.querySelectorAll(".radio-btn").forEach(b => b.classList.remove("active"));
+  el.classList.add("active");
+  document.getElementById("groupIdWrap").style.display = val === "group" ? "block" : "none";
+}
+
+// ── Sliders ─────────────────────────────────────────────────
+function updateTempo(raw) {
+  const idx = parseInt(raw) - 1;
+  const val = TEMPO_MAP[Math.min(idx, TEMPO_MAP.length - 1)];
+  document.getElementById("tempoVal").textContent = `${val}×`;
+  updateHint();
+}
+
+function updatePitch(val) {
+  const v = parseInt(val);
+  document.getElementById("pitchVal").textContent = `${v > 0 ? "+" : ""}${v} st`;
+}
+
+function toggleNormalize() {
+  doNormalize = !doNormalize;
+  document.getElementById("normalizeWrap").classList.toggle("active", doNormalize);
+  localStorage.setItem("xp_normalize", doNormalize ? "1" : "0");
+}
+
+function updateHint() {
+  const val = getTempoValue();
+  const hint = document.getElementById("speedHint");
+  if (val === 1) {
+    hint.classList.remove("show");
+    return;
+  }
+  const ps = (1 / val).toFixed(4).replace(/0+$/, "").replace(/\.$/, "");
+  hint.classList.add("show");
+  hint.innerHTML = `
+    <strong>💡 Cara pakai di Roblox Studio:</strong><br/>
+    Upload speed <strong>${val}×</strong> → set <code>Sound.PlaybackSpeed = ${ps}</code><br/>
+    <span style="font-size:0.78rem;margin-top:4px;display:block">Rumus: PlaybackSpeed = 1 ÷ Upload Speed</span>
+  `;
+}
+
+// ── File handling ────────────────────────────────────────────
+function handleFiles(files) {
+  selectedFiles = Array.from(files);
+  updateFileCount();
+  updateBtn();
+}
+
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById("dropzone").classList.remove("drag");
+  const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith("audio/") || /\.(mp3|wav|ogg|flac|aac|m4a)$/i.test(f.name));
+  if (files.length === 0) return toast("⚠️ Tidak ada file audio yang valid");
+  selectedFiles = files;
+  updateFileCount();
+  updateBtn();
+}
+
+function updateFileCount() {
+  const el = document.getElementById("fileCount");
+  el.textContent = selectedFiles.length > 0 ? `${selectedFiles.length} file dipilih` : "";
+}
+
+function updateBtn() {
+  document.getElementById("uploadBtn").disabled = selectedFiles.length === 0 || isUploading;
+}
+
+// ── Upload ───────────────────────────────────────────────────
+async function startUpload() {
+  const apiKey = document.getElementById("apiKey").value.trim();
+  const userId = document.getElementById("userId").value.trim();
+  const groupId = document.getElementById("groupId").value.trim();
+
+  if (!apiKey) return toast("⚠️ API Key Roblox wajib diisi!");
+  if (!userId) return toast("⚠️ User ID Roblox wajib diisi!");
+  if (creatorType === "group" && !groupId) return toast("⚠️ Group ID wajib diisi untuk mode Group!");
+  if (selectedFiles.length === 0) return toast("⚠️ Pilih file dulu!");
+
+  isUploading = true;
+  updateBtn();
+
+  // Show progress
+  const progressSection = document.getElementById("progressSection");
+  progressSection.style.display = "block";
+  progressSection.scrollIntoView({ behavior: "smooth", block: "start" });
+
+  document.getElementById("logList").innerHTML = "";
+  document.getElementById("progressBar").style.width = "0%";
+  document.getElementById("progressText").textContent = "Mempersiapkan...";
+
+  const tempo = getTempoValue();
+  const pitch = parseInt(document.getElementById("pitchSlider").value);
+
+  const formData = new FormData();
+  selectedFiles.forEach(f => formData.append("files", f));
+  formData.append("apiKey", apiKey);
+  formData.append("creatorType", creatorType);
+  formData.append("userId", userId);
+  if (groupId) formData.append("groupId", groupId);
+  formData.append("tempoMultiplier", String(tempo));
+  formData.append("pitchShift", String(pitch));
+  const displayName = document.getElementById("displayName").value.trim();
+  const description = document.getElementById("description").value.trim();
+  if (displayName) formData.append("displayName", displayName);
+  if (description) formData.append("description", description);
+  formData.append("normalize", doNormalize ? "true" : "false");
+
+  const headers = {};
+  if (accessToken) headers["x-access-token"] = accessToken;
+
+  try {
+    const response = await fetch("/api/upload", { method: "POST", headers, body: formData });
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      const lines = buf.split("\n");
+      buf = lines.pop();
+      for (const line of lines) {
+        if (!line.startsWith("data:")) continue;
+        try {
+          const evt = JSON.parse(line.slice(5).trim());
+          handleSSEEvent(evt);
+        } catch {}
+      }
+    }
+  } catch (e) {
+    toast("❌ Gagal: " + e.message);
+  }
+
+  isUploading = false;
+  updateBtn();
+  loadHistory();
+}
+
+function handleSSEEvent(evt) {
+  const logList = document.getElementById("logList");
+  const bar = document.getElementById("progressBar");
+  const text = document.getElementById("progressText");
+
+  if (evt.type === "start") {
+    text.textContent = `0 / ${evt.total} file selesai`;
+  }
+
+  if (evt.type === "progress") {
+    const pct = ((evt.index - 1) / (evt.total || 1) * 100).toFixed(0);
+    bar.style.width = pct + "%";
+    const statusLabel = { ffmpeg: "🔄 FFmpeg processing...", uploading: "📤 Uploading ke Roblox...", processing: "⚙️ Mempersiapkan..." }[evt.status] || "⚙️";
+    // Add or update log item
+    let item = document.getElementById(`log_${evt.index}`);
+    if (!item) {
+      item = document.createElement("li");
+      item.className = "log-item processing";
+      item.id = `log_${evt.index}`;
+      logList.appendChild(item);
+    }
+    item.innerHTML = `<span class="log-icon">⏳</span><div><div class="log-name">${evt.file}</div><div class="log-detail">${statusLabel}</div></div>`;
+    text.textContent = `${evt.index} / ${evt.total} file diproses...`;
+  }
+
+  if (evt.type === "result") {
+    const pct = (evt.index / (document.querySelectorAll(".log-item").length) * 100).toFixed(0);
+    bar.style.width = Math.min(parseInt(pct), 99) + "%";
+
+    let item = document.getElementById(`log_${evt.index}`);
+    if (!item) {
+      item = document.createElement("li");
+      item.id = `log_${evt.index}`;
+      logList.appendChild(item);
+    }
+
+    if (evt.status === "SUCCESS") {
+      item.className = "log-item success";
+      item.innerHTML = `
+        <span class="log-icon">✅</span>
+        <div>
+          <div class="log-name">${evt.file}</div>
+          <div class="log-detail">
+            Asset ID: <span class="asset-id" onclick="copyText('${evt.assetId}', this)" title="Klik untuk copy">${evt.assetId}</span>
+          </div>
+        </div>`;
+    } else {
+      item.className = "log-item failed";
+      item.innerHTML = `<span class="log-icon">❌</span><div><div class="log-name">${evt.file}</div><div class="log-detail" style="color:var(--error)">${evt.error || "Gagal"}</div></div>`;
+    }
+  }
+
+  if (evt.type === "done") {
+    bar.style.width = "100%";
+    text.textContent = `✅ Selesai! ${evt.success} dari ${evt.total} file berhasil diupload.`;
+    toast(`🎉 ${evt.success}/${evt.total} berhasil!`);
+  }
+}
+
+// ── History ──────────────────────────────────────────────────
+async function loadHistory() {
+  try {
+    const headers = {};
+    if (accessToken) headers["x-access-token"] = accessToken;
+    const res = await fetch("/api/history", { headers });
+    const data = await res.json();
+    renderHistory(data);
+  } catch {}
+}
+
+function renderHistory(items) {
+  const section = document.getElementById("historySection");
+  const list = document.getElementById("historyList");
+  if (!items || items.length === 0) { section.style.display = "none"; return; }
+  section.style.display = "block";
+  list.innerHTML = items.map(h => `
+    <div class="history-item ${h.status}">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start">
+        <strong style="font-size:0.85rem;word-break:break-all">${h.filename}</strong>
+        <span style="font-size:0.75rem;color:${h.status==='SUCCESS'?'var(--success)':'var(--error)'};flex-shrink:0;margin-left:8px">${h.status}</span>
+      </div>
+      ${h.assetId ? `<div class="asset-id" onclick="copyText('${h.assetId}',this)" style="margin-top:4px">${h.assetId}</div>` : ""}
+      ${h.error ? `<div style="color:var(--error);font-size:0.75rem;margin-top:4px">${h.error.slice(0,120)}</div>` : ""}
+      <div class="history-meta">
+        Speed: ${h.tempo}× | Pitch: ${h.pitch > 0 ? "+" : ""}${h.pitch}st | ${new Date(h.createdAt).toLocaleString("id-ID")}
+      </div>
+    </div>
+  `).join("");
+}
+
+async function clearHistory() {
+  const headers = {};
+  if (accessToken) headers["x-access-token"] = accessToken;
+  await fetch("/api/history", { method: "DELETE", headers });
+  renderHistory([]);
+  toast("🗑️ History dihapus");
+}
+
+// ── Utils ────────────────────────────────────────────────────
+function copyText(text, el) {
+  navigator.clipboard.writeText(text).then(() => {
+    const orig = el.textContent;
+    el.textContent = "✅ Copied!";
+    setTimeout(() => { el.textContent = orig; }, 1500);
+  });
+}
+
+let toastTimer;
+function toast(msg) {
+  const el = document.getElementById("toast");
+  el.textContent = msg;
+  el.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove("show"), 2500);
+}
+
+// ── Validate Roblox API Key ─────────────────────────────────
+async function validateApiKey() {
+  const apiKey  = document.getElementById("apiKey").value.trim();
+  const userId  = document.getElementById("userId").value.trim();
+  const groupId = document.getElementById("groupId").value.trim();
+  const resultEl = document.getElementById("validateResult");
+  const btn = document.getElementById("validateBtn");
+
+  if (!apiKey) return toast("⚠️ API Key wajib diisi dulu!");
+  if (!userId) return toast("⚠️ User ID wajib diisi dulu!");
+  if (creatorType === "group" && !groupId) return toast("⚠️ Group ID wajib diisi untuk mode Group!");
+
+  btn.disabled = true;
+  btn.textContent = "⏳ Mengecek...";
+  resultEl.style.display = "none";
+
+  try {
+    const headers = { "Content-Type": "application/json" };
+    if (authToken) headers["Authorization"] = `Bearer ${authToken}`;
+
+    const res = await fetch("/api/validate-key", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ apiKey, creatorType, userId, groupId })
+    });
+    const data = await res.json();
+
+    if (data.valid) {
+      resultEl.style.background = "rgba(0,229,100,0.1)";
+      resultEl.style.border = "1px solid rgba(0,229,100,0.4)";
+      resultEl.style.color = "#00e564";
+      resultEl.innerHTML = `✅ <strong>API Key Valid!</strong><br>` +
+        `Mode: <strong>${data.creatorType === "group" ? "👥 Group" : "👤 Personal"}</strong><br>` +
+        `Nama: <strong>${data.name}</strong>`;
+    } else {
+      const errMsg = typeof data.error === "object"
+        ? (data.error.message || JSON.stringify(data.error))
+        : (data.error || "Unknown error");
+      resultEl.style.background = "rgba(255,60,60,0.1)";
+      resultEl.style.border = "1px solid rgba(255,60,60,0.4)";
+      resultEl.style.color = "#ff6b6b";
+      resultEl.innerHTML = `❌ <strong>API Key Tidak Valid</strong><br>` +
+        `Status: <strong>${data.status || "-"}</strong><br>` +
+        `Error: ${errMsg}`;
+    }
+    resultEl.style.display = "block";
+  } catch (e) {
+    resultEl.style.background = "rgba(255,60,60,0.1)";
+    resultEl.style.border = "1px solid rgba(255,60,60,0.4)";
+    resultEl.style.color = "#ff6b6b";
+    resultEl.innerHTML = `❌ Gagal terhubung ke server: ${e.message}`;
+    resultEl.style.display = "block";
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "🔍 Test API Key";
+  }
+}
+
+// ── Init ────────────────────────────────────────────────────
+initAuth();
+</script>
+</body>
+</html>
