@@ -25,6 +25,15 @@ const PORT = process.env.PORT || 3000;
 // ── Middleware ──────────────────────────────────────────────
 app.use(cors());
 app.use(express.json());
+// Disable cache untuk HTML supaya browser selalu ambil versi terbaru
+app.use((req, res, next) => {
+  if (req.path === "/" || req.path.endsWith(".html")) {
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+    res.setHeader("Pragma", "no-cache");
+    res.setHeader("Expires", "0");
+  }
+  next();
+});
 app.use(express.static(path.join(__dirname, "public")));
 
 // ── Simple Auth Middleware ──────────────────────────────────
@@ -53,10 +62,14 @@ const upload = multer({
 // ── Upload history (in-memory, cukup untuk personal) ───────
 const history = [];
 
-// ── Logging ────────────────────────────────────────────────
+// ── Server log (in-memory, max 200 entries) ─────────────────
+const serverLogs = [];
 function log(msg, type = "info") {
   const icons = { error: "❌", success: "✅", warn: "⚠️", info: "ℹ️" };
-  console.log(`[${new Date().toISOString()}] ${icons[type] || "ℹ️"} ${msg}`);
+  const entry = { time: new Date().toISOString(), type, msg };
+  serverLogs.unshift(entry);
+  if (serverLogs.length > 200) serverLogs.pop();
+  console.log(`[${entry.time}] ${icons[type] || "ℹ️"} ${msg}`);
 }
 
 // ── Build atempo chain (FFmpeg max per node: 0.5–2.0) ──────
@@ -236,18 +249,41 @@ app.post("/api/validate-key", requireAuth, async (req, res) => {
   }
 
   try {
-    const url = creatorType === "group"
-      ? `https://apis.roblox.com/cloud/v2/groups/${groupId.trim()}`
-      : `https://apis.roblox.com/cloud/v2/users/${userId.trim()}`;
+    let name = "(tidak diketahui)";
 
-    const r = await axios.get(url, {
-      headers: { "x-api-key": apiKey.trim() }
-    });
+    if (creatorType === "group") {
+      // Validasi group via Open Cloud v2
+      const r = await axios.get(
+        `https://apis.roblox.com/cloud/v2/groups/${groupId.trim()}`,
+        { headers: { "x-api-key": apiKey.trim() } }
+      );
+      name = r.data.displayName || r.data.name || `Group ${groupId}`;
+    } else {
+      // Validasi user: coba v2 dulu
+      try {
+        const r = await axios.get(
+          `https://apis.roblox.com/cloud/v2/users/${userId.trim()}`,
+          { headers: { "x-api-key": apiKey.trim() } }
+        );
+        name = r.data.displayName || r.data.name || r.data.username || `User ${userId}`;
+      } catch (e2) {
+        const status2 = e2.response?.status;
+        // 403 = API key valid tapi tidak punya izin user:read → tetap anggap valid
+        if (status2 === 403) {
+          try {
+            const pub = await axios.get(`https://users.roblox.com/v1/users/${userId.trim()}`);
+            name = pub.data.displayName || pub.data.name || `User ${userId}`;
+          } catch {
+            name = `User ${userId}`;
+          }
+        } else {
+          throw e2; // 401 atau error lain = API key benar-benar invalid
+        }
+      }
+    }
 
-    const data = r.data;
-    const name = data.displayName || data.name || data.username || "(tidak diketahui)";
     log(`API Key valid — ${creatorType}: ${name}`, "success");
-    res.json({ valid: true, creatorType, name, raw: data });
+    res.json({ valid: true, creatorType, name });
   } catch (e) {
     const errData = e.response?.data;
     const status = e.response?.status;
@@ -345,6 +381,18 @@ app.get("/api/history", requireAuth, (req, res) => {
 // ── Clear history ───────────────────────────────────────────
 app.delete("/api/history", requireAuth, (req, res) => {
   history.length = 0;
+  res.json({ ok: true });
+});
+
+// ── Get server logs ────────────────────────────────────────
+app.get("/api/logs", requireAuth, (req, res) => {
+  const limit = parseInt(req.query.limit) || 100;
+  res.json(serverLogs.slice(0, limit));
+});
+
+// ── Clear server logs ───────────────────────────────────────
+app.delete("/api/logs", requireAuth, (req, res) => {
+  serverLogs.length = 0;
   res.json({ ok: true });
 });
 
